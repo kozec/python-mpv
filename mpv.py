@@ -1,11 +1,7 @@
-#!/usr/bin/python
-
-from ctypes import (
-    c_int, c_void_p, c_ulong, c_char_p, CDLL, c_ulonglong, CFUNCTYPE,
-    Structure, POINTER, cast, c_double, RTLD_GLOBAL)
+#!/usr/bin/python2
+from ctypes import *
+import threading
 import os
-import asyncio
-
 
 backend = CDLL('libmpv.so')
 
@@ -289,7 +285,8 @@ class MPV:
                         self._playback_cond.notify_all()
                 for callback in self.event_callbacks:
                     callback.call()
-        self._event_thread = threading.Thread(target=event_loop, daemon=True)
+        self._event_thread = threading.Thread(target=event_loop)
+        self._event_thread.daemon = True
         self._event_thread.start()
 
         _mpv_set_option_string(self.handle, b'audio-display', b'no')
@@ -299,11 +296,10 @@ class MPV:
             _mpv_set_option_string(self.handle, k.replace('_', '-').encode(), istr(v).encode())
         _mpv_initialize(self.handle)
 
-    @asyncio.coroutine
     def wait_for_playback(self):
-        """Waits until playback of the current title is paused or done"""
-        with (yield from self._playback_cond):
-            yield from self._playback_cond.wait()
+        """ Waits until playback of the current title is paused or done """
+        with self._playback_cond:
+            self._playback_cond.wait()
 
     def __del__(self):
         _mpv_terminate_destroy(self.handle)
