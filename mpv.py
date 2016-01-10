@@ -143,8 +143,7 @@ class MpvEventLogMessage(Structure):
                 ('text', c_char_p)]
 
     def as_dict(self):
-        return {name: getattr(self, name).value for name, _t in self._fields_}
-
+        return { name: getattr(self, name) for name, _t in self._fields_ }
 
 class MpvEventEndFile(c_int):
     EOF_OR_INIT_FAILURE = 0
@@ -243,8 +242,8 @@ class ynbool:
     def __init__(self, val=False):
         self.val = bool(val and val not in (b'no', 'no'))
 
-    def __nonzero__(self):
-        return self.val
+    def __bool__(self):
+        return bool(self.val)
 
     def __str__(self):
         return 'yes' if self.val else 'no'
@@ -259,7 +258,7 @@ def _ensure_encoding(possibly_bytes):
 
 def _event_generator(handle):
     while True:
-        event = _mpv_wait_event(handle, 0).contents
+        event = _mpv_wait_event(handle, -1).contents
         if event.event_id.value == MpvEventID.NONE:
             raise StopIteration()
         yield event
@@ -273,20 +272,16 @@ def load_lua():
 
 class MPV:
     """ See man mpv(1) for the details of the implemented commands. """
-    def __init__(self, evloop=None, **kwargs):
-        """Create an MPV instance. You should pass in an asyncio event loop
-        that will  handle the mpv event queue via the evloop argument. If you
-        do not pass in one, asyncio.get_event_loop()'s loop will be used.
-        Any kwargs given will be passed to mpv as options."""
+    def __init__(self, **kwargs):
+        """ Create an MPV instance.
+        
+        Any kwargs given will be passed to mpv as options. """
 
         self.handle = _mpv_create()
 
         self.event_callbacks = []
-        self._event_fd = _mpv_get_wakeup_pipe(self.handle)
-        self._playback_cond = asyncio.Condition()
-
-        def mpv_event_extractor():
-            os.read(self._event_fd, 512)
+        self._playback_cond = threading.Condition()
+        def event_loop():
             for event in _event_generator(self.handle):
                 devent = event.as_dict()  # copy data from ctypes
                 if devent['event_id'] in (MpvEventID.SHUTDOWN, MpvEventID.END_FILE, MpvEventID.PAUSE):
@@ -294,8 +289,8 @@ class MPV:
                         self._playback_cond.notify_all()
                 for callback in self.event_callbacks:
                     callback.call()
-
-        evloop = evloop or asyncio.get_event_loop()
+        self._event_thread = threading.Thread(target=event_loop, daemon=True)
+        self._event_thread.start()
 
         _mpv_set_option_string(self.handle, b'audio-display', b'no')
         istr = lambda o: ('yes' if o else 'no') if type(o) is bool else str(o)
