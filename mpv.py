@@ -286,7 +286,7 @@ class MPV:
                     with self._playback_cond:
                         self._playback_cond.notify_all()
                 for callback in self.event_callbacks:
-                    callback.call()
+                    callback(event)
         self._event_thread = threading.Thread(target=event_loop)
         self._event_thread.daemon = True
         self._event_thread.start()
@@ -297,6 +297,10 @@ class MPV:
         for k, v in kwargs.items():
             _mpv_set_option_string(self.handle, k.replace('_', '-').encode(), istr(v).encode())
         _mpv_initialize(self.handle)
+
+    def add_callback(self, cb):
+        """ Adds new callback """
+        self.event_callbacks.append(cb)
 
     def wait_for_playback(self):
         """ Waits until playback of the current title is paused or done """
