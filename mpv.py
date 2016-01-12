@@ -268,7 +268,7 @@ def load_lua():
     CDLL('liblua.so', mode=RTLD_GLOBAL)
 
 
-class MPV:
+class MPV(object):
     """ See man mpv(1) for the details of the implemented commands. """
     def __init__(self, **kwargs):
         """ Create an MPV instance.
