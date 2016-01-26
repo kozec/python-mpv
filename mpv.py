@@ -2,8 +2,12 @@
 from ctypes import *
 import threading
 import os
+import platform
 
-backend = CDLL('libmpv.so')
+if platform.system() == "Windows":
+	backend = CDLL('mpv-1.dll')
+else:
+	backend = CDLL('libmpv.so')
 
 
 class MpvHandle(c_void_p):
@@ -286,7 +290,7 @@ class MPV(object):
                     with self._playback_cond:
                         self._playback_cond.notify_all()
                 for callback in self.event_callbacks:
-                    callback(event)
+                    callback(devent['event_id'], devent)
         self._event_thread = threading.Thread(target=event_loop)
         self._event_thread.daemon = True
         self._event_thread.start()
@@ -298,6 +302,9 @@ class MPV(object):
             _mpv_set_option_string(self.handle, k.replace('_', '-').encode(), istr(v).encode())
         _mpv_initialize(self.handle)
 
+    def request_log_messages(self, level):
+        _mpv_request_log_messages(self.handle, level)
+    
     def add_callback(self, cb):
         """ Adds new callback """
         self.event_callbacks.append(cb)
